@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pixely Heart Popup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg: #0b66ff;         /* bright blue background */
+      --pixel-size: 18px;    /* size of each pixel block */
+      --heart-scale: 1.35;
+    }
+    html,body{height:100%; margin:0;}
+    body{
+      background:var(--bg);
+      font-family: 'Press Start 2P', monospace;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      -webkit-font-smoothing: none;
+      image-rendering: pixelated;
+    }
+
+    /* container (centers the heart) */
+    .popup{
+      position:relative;
+      padding:28px;
+      border-radius:10px;
+      backdrop-filter: blur(3px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* Pixel-art heart using CSS grid of small divs */
+    .heart-grid{
+      display:grid;
+      grid-template-columns: repeat(10, var(--pixel-size));
+      grid-auto-rows: var(--pixel-size);
+      gap:2px; /* space between "pixels" to make it chunky */
+      transform-origin:center;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 6px 0 rgba(0,0,0,0.25));
+      cursor:pointer;
+      animation: beat 1200ms infinite;
+      transition: transform 220ms cubic-bezier(.2,.9,.3,1);
+      outline: none;
+      user-select: none;
+    }
+    .heart-grid:active{
+      transform: scale(calc(var(--heart-scale) - 0.05)) rotate(-3deg);
+    }
+
+    /* heartbeat */
+    @keyframes beat {
+      0%,100% { transform: scale(1); }
+      50%     { transform: scale(1.15); }
+    }
+
+    /* individual pixel squares */
+    .px{ width:var(--pixel-size); height:var(--pixel-size); background:transparent; box-shadow: inset -1px -1px 0 rgba(0,0,0,0.18); }
+    .red{ background: #ff2b4b; }
+    .dark{ background:#b71c34; }
+
+    /* popup message that appears from the heart */
+    #msg {
+      position:fixed;
+      left:50%;
+      top:50%;
+      transform: translate(-50%, -50%) scale(0.1);
+      background: rgba(0,0,0,0.88);
+      color: #fff;
+      padding:12px 18px;
+      border-radius:6px;
+      font-size:12px;
+      letter-spacing:0.5px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transform-origin:center;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.45);
+      z-index: 999;
+      font-family: 'Press Start 2P', monospace;
+    }
+    /* hidden state (keeps element out of flow & invisible) */
+    .hidden { opacity:0; pointer-events:none; }
+
+    /* small responsive tweak */
+    @media (max-width:420px){
+      :root{ --pixel-size:12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="popup">
+    <div id="heart" class="heart-grid" role="button" aria-label="pixel heart (press Enter or Space to activate)"></div>
+  </div>
+
+  <!-- message will be positioned by JS so it appears to come from heart center -->
+  <div id="msg" class="hidden"></div>
+
+  <script>
+    // --- build the 10x10 pixel heart ---
+    const heartEl = document.getElementById('heart');
+
+    // create 100 pixel cells
+    for (let i = 0; i < 100; i++) {
+      const d = document.createElement('div');
+      d.className = 'px';
+      d.setAttribute('data-i', i);
+      heartEl.appendChild(d);
+    }
+
+    // precise 10x10 heart bitmap (1 = filled pixel)
+    const heartMap = [
+      '0011001100',
+      '0111111110',
+      '1111111111',
+      '1111111111',
+      '0111111110',
+      '0011111100',
+      '0001111000',
+      '0000110000',
+      '0000000000',
+      '0000000000'
+    ];
+
+    // apply red/dark classes to pixels according to map
+    const pixels = heartEl.querySelectorAll('.px');
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 10; c++) {
+        if (heartMap[r][c] === '1') {
+          const idx = r * 10 + c;
+          const el = pixels[idx];
+          // slight shading variation
+          if (Math.random() > 0.72) el.classList.add('dark');
+          else el.classList.add('red');
+        }
+      }
+    }
+
+    // scale the whole grid up to the designed heart scale (idle state)
+    heartEl.style.transform = `scale(${varOr(1, '--heart-scale')})`;
+
+    // helper to read CSS variable with fallback
+    function varOr(fallback, name) {
+      try {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+        return v ? v.trim() : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    // --- popup message behavior ---
+    const msg = document.getElementById('msg');
+    let hideTimer = null;
+
+    function showMessageFromHeart() {
+      // compute heart center in viewport coords
+      const rect = heartEl.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+
+      // place message centered at that point (fixed coords)
+      msg.style.left = cx + 'px';
+      msg.style.top = cy + 'px';
+      msg.classList.remove('hidden');
+
+      // animate the message (scale + fade in)
+      msg.animate([
+        { transform: 'translate(-50%, -50%) scale(0.12)', opacity: 0 },
+        { transform: 'translate(-50%, -50%) scale(1.12)', opacity: 1 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 }
+      ], { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1)' });
+
+      // auto hide after 1.8s
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        // fade out
+        const anim = msg.animate([
+          { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+          { transform: 'translate(-50%, -50%) scale(0.8)', opacity: 0 }
+        ], { duration: 280, easing: 'ease-in' });
+        anim.onfinish = () => msg.classList.add('hidden');
+      }, 1800);
+    }
+
+    // heart click: pop animation + show message
+    heartEl.addEventListener('click', () => {
+      heartEl.animate([
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.25)' },
+        { transform: 'scale(1)' }
+      ], { duration: 320, easing: 'cubic-bezier(.2,.9,.3,1)' });
+
+      showMessageFromHeart();
+    });
+
+    // keyboard support
+    heartEl.setAttribute('tabindex', '0');
+    heartEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        showMessageFromHeart();
+      }
+    });
+
+    // ensure message stays aligned if viewport changes while visible
+    window.addEventListener('resize', () => {
+      if (!msg.classList.contains('hidden')) showMessageFromHeart();
+    });
+    window.addEventListener('scroll', () => {
+      if (!msg.classList.contains('hidden')) showMessageFromHeart();
+    });
+  </script>
+</body>
+</html>
